@@ -22,6 +22,7 @@ def create_intermediate_data(df):
     x['vowels_count'] = x['vowels_present'].apply(lambda p: len(p))
     x['unique_char_count'] = x[0].apply(lambda p: len(set(p)))
     x_ = x[~((x['unique_char_count'].isin([0, 1, 2])) | (x[1] <= 3)) & (x.vowels_count != 0)]
+    return x_
 
 def read_data():
     with open("./Data/words_250000_train.txt", "r") as f:
@@ -34,6 +35,7 @@ def loop_for_permutation(unique_letters, word, all_perm, i):
     for letter in random_letters:
         new_permuted_word = new_permuted_word.replace(letter, "_")
         all_perm.append(new_permuted_word)
+
 
 def permute_all(word, vowel_permutation_loop=False):
     unique_letters = list(set(word))
@@ -82,6 +84,7 @@ def create_masked_dictionary(df_aug):
         if counter % 10000 == 0:
             print(f"Iteration {counter} completed")
         counter = counter + 1
+    return masked_dictionary
 
 def get_vowel_prob(df_vowel, vowel):
     try:
@@ -163,6 +166,7 @@ def get_datasets():
     save_input_output_data(input_data, target_data)
     input_tensor, target_tensor = convert_to_tensor(input_data, target_data)
     
+    return input_tensor, target_tensor
 
 
 
