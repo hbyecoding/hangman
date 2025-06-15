@@ -1,0 +1,3 @@
+"""
+Hangman AI Solver package
+""" 
