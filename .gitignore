@@ -1,0 +1,7 @@
+# 屏蔽所有 .pkl 和 .pt 文件
+*.pkl
+*.pt
+
+# 如果需要屏蔽特定目录下的文件（例如 models/ 文件夹）
+models/*.pkl
+models/*.pt
