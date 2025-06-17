@@ -1,2 +1,4 @@
 # using_bi-LSTM/input_features.txt filter=lfs diff=lfs merge=lfs -text
 # using_bi-LSTM/target_features.txt filter=lfs diff=lfs merge=lfs -text
+using_bi-LSTM/input_features.txt filter=lfs diff=lfs merge=lfs -text
+using_bi-LSTM/target_features.txt filter=lfs diff=lfs merge=lfs -text
