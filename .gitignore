@@ -11,3 +11,5 @@ models/*.pt
 
 
 RL4LMs/
+using_bi-LSTM/input_features.txt
+using_bi-LSTM/target_features.txt
