@@ -9,12 +9,14 @@ import collections
 from sklearn.feature_extraction.text import CountVectorizer
 import yaml
 import logging
+import os
 
 config = None
 
 MAX_WORDLEN = 25
 
-with open("config.yaml", 'r') as stream:
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+with open(config_path, 'r') as stream:
 	try:
 		config = yaml.safe_load(stream)
 	except yaml.YAMLError as exc:
@@ -30,9 +32,9 @@ class HangmanEnv(gym.Env):
 		# super().__init__()
 		self.vocab_size = 26
 		self.mistakes_done = 0
-		f = open("./words.txt", 'r').readlines()
-		self.wordlist = [w.strip() for w in f]
-		self.action_space = spaces.Discrete(26)
+		self.action_space = spaces.Discrete(26)  # 26个字母
+		self.observation_space = spaces.Box(low=0, high=1, shape=(26,), dtype=np.float32)
+		self.words = self.load_words('words_250000_train.txt')
 		self.vectorizer = CountVectorizer(tokenizer=lambda x: list(x))
 		# self.wordlist = [w.strip() for w in f]
 		self.vectorizer.fit([string.ascii_lowercase])
@@ -40,12 +42,7 @@ class HangmanEnv(gym.Env):
 		self.char_to_id = {chr(97+x): x for x in range(self.vocab_size)}
 		self.char_to_id['_'] = self.vocab_size
 		self.id_to_char = {v:k for k, v in self.char_to_id.items()}
-		self.observation_space = spaces.Tuple((
-			spaces.MultiDiscrete(np.array([25]*27)),     #Current obscured string
-			spaces.MultiDiscrete(np.array([1]*26))      #Actions used                      #Wordlen
-		))
-		self.observation_space.shape=(27, 26)
-		self.seed()
+		self.reset()
 
 	def filter_and_encode(self, word, vocab_size, min_len, char_to_id):
 		"""
@@ -82,8 +79,22 @@ class HangmanEnv(gym.Env):
 		self.np_random, seed = seeding.np_random(seed)
 		return [seed]
 
+	def load_words(self, filename):
+		"""加载单词文件"""
+		try:
+			with open(filename, 'r', encoding='utf-8') as f:
+				words = [word.strip().lower() for word in f.readlines()]
+			return words
+		except FileNotFoundError:
+			logger.error(f"找不到单词文件: {filename}")
+			return []
+
 	def choose_word(self):
-		return random.choice(self.wordlist)
+		"""从单词列表中选择一个单词"""
+		if not self.words:
+			logger.error("单词列表为空")
+			return "hangman"  # 默认单词
+		return random.choice(self.words)
 
 	def count_words(self, word):
 		lens = [len(w) for w in self.wordlist]
@@ -147,53 +158,64 @@ class HangmanEnv(gym.Env):
 			return False
 
 	def step(self, action):
-		done = False
-		reward = 0
-		if string.ascii_lowercase[action.argmax()] in self.actions_used:
-			reward = -4.0
-			self.mistakes_done += 1
-			logger.info("Env Step: repeated action, action was= {0}".format(string.ascii_lowercase[action.argmax()]))
-			logger.info("ENV STEP: Mistakes done = {0}".format(self.mistakes_done))
-			if self.mistakes_done >= 6:
-				done = True
-				self.win = True
-				self.gameover = True
-		elif string.ascii_lowercase[action.argmax()] in self.actions_correct:
-			reward = -3.0
-			logger.info("Env Step: repeated correct action, action was= {0}".format(string.ascii_lowercase[action.argmax()]))
-			logger.info("ENV STEP: Mistakes done = {0}".format(self.mistakes_done))
-			# done = True
-			# self.win = True
-			# self.gameover = True
-		elif self.check_guess(self.vec2letter(action.argmax())):
-			logger.info("ENV STEP: Correct guess, evaluating reward, guess was = {0}".format(string.ascii_lowercase[action.argmax()]))
-			if(set(self.word) == self.actions_correct):
-				reward = 10.0
-				done = True
-				self.win = True
-				self.gameover = True
-				logger.info("ENV STEP: Won Game, evaluating reward, guess was = {0}".format(string.ascii_lowercase[action.argmax()]))
-			# self.evaluate_subset(action)
-			reward = +1.0
-			# reward = self.edit_distance(self.state, self.prev_string)
-			self.actions_correct.add(string.ascii_lowercase[action.argmax()])
+		# 检查action类型
+		if isinstance(action, int):
+			action_idx = action
 		else:
-			logger.info("ENV STEP: Incorrect guess, evaluating reward, guess was = {0}".format(string.ascii_lowercase[action.argmax()]))
+			action_idx = action.argmax()
+			
+		# 将action转换为字母
+		letter = chr(action_idx + ord('a'))
+		
+		# 初始化done变量
+		done = False
+		
+		# 检查是否已经猜过这个字母
+		if letter in self.actions_used:
+			return self.state, -5.0, True, {'win': False, 'message': 'Letter already guessed'}
+		
+		# 添加猜测的字母
+		self.actions_used.add(letter)
+		
+		# 检查字母是否在单词中
+		if self.check_guess(letter):
+			logger.info("ENV STEP: Correct guess, evaluating reward, guess was = {0}".format(letter))
+			if(set(self.word) == self.actions_correct):
+				# 胜利奖励：基础分 + 剩余机会奖励
+				remaining_chances = 6 - self.mistakes_done
+				reward = 50.0 + (remaining_chances * 5.0)  # 基础50分，每剩余一次机会加5分
+				done = True
+				self.win = True
+				self.gameover = True
+				logger.info("ENV STEP: Won Game, evaluating reward, guess was = {0}".format(letter))
+			else:
+				# 根据猜对的字母数量和单词长度给予奖励
+				new_revealed = len([c for c in self.word if c in self.actions_correct])
+				old_revealed = len([c for c in self.word if c in (self.actions_correct - {letter})])
+				# 基础奖励3分，根据单词长度增加奖励
+				base_reward = 3.0
+				length_bonus = min(len(self.word) / 10, 2.0)  # 单词越长，奖励越高，最多加2分
+				reward = (base_reward + length_bonus) * (new_revealed - old_revealed)
+				self.actions_correct.add(letter)
+		# 如果猜错了
+		else:
+			logger.info("ENV STEP: Incorrect guess, evaluating reward, guess was = {0}".format(letter))
 			self.mistakes_done += 1
 			if(self.mistakes_done >= 6):
-				reward = -5.0
+				# 失败惩罚：基础分 + 剩余未猜出字母的惩罚
+				remaining_letters = len(set(self.word) - self.actions_correct)
+				reward = -20.0 - (remaining_letters * 2.0)  # 基础-20分，每个未猜出的字母-2分
 				done = True
 				self.gameover = True
 			else:
-				reward = -2.0
+				# 错误惩罚：基础分 + 剩余机会相关的惩罚
+				remaining_chances = 6 - self.mistakes_done
+				reward = -2.0 - (1.0 / remaining_chances)  # 基础-2分，剩余机会越少惩罚越大
 
-		self.actions_used.add(string.ascii_lowercase[action.argmax()])
-
-		logger.info("ENV STEP: actions used = {0}".format(" ".join(self.actions_used)))
 		logger.info("ENV STEP: actions used = {0}".format(" ".join(self.actions_used)))
 		self.state = (
 			self.filter_and_encode(self.guess_string, 26, 0, self.char_to_id),
 			self.vectorizer.transform(list(self.actions_used)).toarray()[0]
 		)
 		logger.debug("Intermediate State = {self.state}")
-		return (self.state, reward, done, {'win' :self.win, 'gameover':self.gameover})
+		return (self.state, reward, done, {'win': self.win, 'gameover': self.gameover})

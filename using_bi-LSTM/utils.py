@@ -151,21 +151,40 @@ def save_input_output_data(input_data, target_data):
         print('Done')
 
 def convert_to_tensor(input_data, target_data):
+    # 转换为张量
     input_tensor = torch.tensor(input_data, dtype=torch.long)
     target_tensor = torch.tensor(target_data, dtype=torch.float32)
+    
+    # 如果有GPU可用，将数据移到GPU
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0')
+        input_tensor = input_tensor.to(device)
+        target_tensor = target_tensor.to(device)
+        print("Data moved to GPU")
+    
     return input_tensor, target_tensor
 
 def get_datasets():
+    print("Loading and processing data...")
     df = read_data()
     x_ = create_intermediate_data(df)
     df_aug = x_.copy()
+    
+    print("Creating masked dictionary...")
     masked_dictionary = create_masked_dictionary(df_aug)
+    
+    print("Computing vowel priors...")
     vowel_prior = get_vowel_prior(df_aug)
     save_vowel_prior(vowel_prior)
+    
+    print("Encoding words...")
     input_data, target_data = encode_words(masked_dictionary)
     save_input_output_data(input_data, target_data)
+    
+    print("Converting to tensors...")
     input_tensor, target_tensor = convert_to_tensor(input_data, target_data)
     
+    print("Data preparation completed!")
     return input_tensor, target_tensor
 
 

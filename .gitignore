@@ -2,6 +2,12 @@
 *.pkl
 *.pt
 
+# log
+*.log
+
 # 如果需要屏蔽特定目录下的文件（例如 models/ 文件夹）
 models/*.pkl
 models/*.pt
+
+
+RL4LMs/

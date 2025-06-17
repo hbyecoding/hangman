@@ -6,7 +6,7 @@ import numpy as np
 
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward', 'done'))
+                        ('word_tensor', 'actions_tensor', 'next_word_tensor', 'next_actions_tensor', 'action', 'reward', 'done'))
 
 
 class ReplayMemory(object):
